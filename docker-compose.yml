@@ -1,0 +1,6 @@
+services:
+  dhub:
+    build: .
+    volumes:
+      - .:/data:ro
+    working_dir: /app
