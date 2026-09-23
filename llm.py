@@ -8,9 +8,8 @@ from summarizer import summarize
 
 
 @lru_cache(maxsize=1)
-def _get_groq_client():
+def _get_groq_client(api_key: Optional[str]):
     """Create the Groq client only when a Groq request is actually needed."""
-    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return None
     try:
@@ -31,7 +30,7 @@ def call_llm(system_prompt: str, user_message: str) -> str:
     Returns:
         The agent's text response.
     """
-    client = _get_groq_client()
+    client = _get_groq_client(os.getenv("GROQ_API_KEY"))
     if client is None:
         raise RuntimeError("GROQ_API_KEY and the groq package are required")
     response = client.chat.completions.create(
@@ -72,7 +71,7 @@ def _openai_summary(text: str, task: str) -> Optional[str]:
 
 def _groq_summary(text: str, task: str) -> Optional[str]:
     """Summarize evidence through the Groq chat-completions API."""
-    client = _get_groq_client()
+    client = _get_groq_client(os.getenv("GROQ_API_KEY"))
     if client is None:
         return None
     try:
