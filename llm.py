@@ -3,9 +3,34 @@
 import os
 from functools import lru_cache
 from typing import Optional
-
+from groq import Groq
 from summarizer import summarize
+# --- Groq API Configuration ---
+GROQ_API_KEY = ""
+MODEL_NAME   = "llama-3.3-70b-versatile"
 
+client = Groq(api_key=GROQ_API_KEY)
+def call_llm(system_prompt: str, user_message: str) -> str:
+    """
+    Send a message to Groq and return the text response.
+
+    Args:
+        system_prompt: Defines the agent's role and behavior.
+        user_message:  The input content for the agent to process.
+
+    Returns:
+        The agent's text response.
+    """
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_message}
+        ],
+        temperature=0.7,
+        max_tokens=1024
+    )
+    return response.choices[0].message.content.strip()
 
 def _prompt(text: str, task: str) -> str:
     return (

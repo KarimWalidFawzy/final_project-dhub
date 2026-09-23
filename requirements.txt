@@ -2,3 +2,4 @@ pypdf>=5.0
 openai>=1.0
 transformers>=4.40
 torch>=2.0
+groq>=0.1.0
