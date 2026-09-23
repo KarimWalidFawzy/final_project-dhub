@@ -1,8 +1,15 @@
 """Small orchestration primitives used by the research agent."""
 
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AutoModel, AutoModelForMaskedLM, AutoModelForCausalLM
+
+try:
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+except ImportError:  # pragma: no cover - optional dependency for offline generation
+    AutoTokenizer = None  # type: ignore[assignment]
+    AutoModelForCausalLM = None  # type: ignore[assignment]
+
 
 @dataclass
 class StepResult:
@@ -18,8 +25,19 @@ class Agent:
         self.name = name
         self.steps: List[Callable[[Dict[str, Any]], Any]] = []
         self.history: List[StepResult] = []
-        self.model = AutoModelForCausalLM.from_pretrained("gpt3")  # Placeholder for a model or LLM if needed
-        self.tokenizer = AutoTokenizer.from_pretrained("gpt3")  # Placeholder for a tokenizer if needed
+        self.model: Optional[Any] = None
+        self.tokenizer: Optional[Any] = None
+
+    def load_model(self, model_name: Optional[str] = None) -> tuple[Any, Any]:
+        """Load a local Hugging Face model only when it is actually needed."""
+        if self.model is not None and self.tokenizer is not None:
+            return self.model, self.tokenizer
+        if AutoTokenizer is None or AutoModelForCausalLM is None:
+            raise RuntimeError("transformers is required to load a local model")
+        resolved_name = model_name or os.getenv("HF_MODEL") or "distilgpt2"
+        self.model = AutoModelForCausalLM.from_pretrained(resolved_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(resolved_name)
+        return self.model, self.tokenizer
 
     def add_step(self, name: str, function: Callable[[Dict[str, Any]], Any]) -> "Agent":
         function.step_name = name  # type: ignore[attr-defined]

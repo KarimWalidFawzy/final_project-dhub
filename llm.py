@@ -1,6 +1,7 @@
 """LLM providers for D-Hub with a deterministic offline fallback."""
 
 import os
+from functools import lru_cache
 from typing import Optional
 
 from summarizer import summarize
@@ -12,6 +13,17 @@ def _prompt(text: str, task: str) -> str:
         "State uncertainty when evidence is insufficient.\n"
         f"Task: {task}\nEvidence: {text}"
     )
+
+
+@lru_cache(maxsize=1)
+def _get_transformer_generator():
+    try:
+        from transformers import pipeline
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("transformers is required for local LLM summaries") from exc
+
+    model_name = os.getenv("HF_MODEL", "google/flan-t5-small")
+    return pipeline("text2text-generation", model=model_name)
 
 
 def _openai_summary(text: str, task: str) -> Optional[str]:
@@ -37,14 +49,9 @@ def _openai_summary(text: str, task: str) -> Optional[str]:
 
 
 def _transformers_summary(text: str, task: str) -> Optional[str]:
-    """Run a local Hugging Face text-to-text model when explicitly requested."""
+    """Run a cached local Hugging Face text-to-text model when explicitly requested."""
     try:
-        from transformers import pipeline
-
-        generator = pipeline(
-            "text2text-generation",
-            model=os.getenv("HF_MODEL", "google/flan-t5-small"),
-        )
+        generator = _get_transformer_generator()
         result = generator(_prompt(text, task), max_new_tokens=180, do_sample=False)
         generated = result[0].get("generated_text", "")
         return generated.strip() or None

@@ -109,11 +109,14 @@ def load_source(source: str, timeout: int = 12) -> Document:
 
 def retrieve(sources: Iterable[str], query: str = "") -> List[Document]:
 	"""Load sources and rank them by the number of query terms they contain."""
+	source_list = list(sources)
+	if not source_list:
+		return []
 	terms = {term.lower() for term in query.split() if len(term) > 2}
 	documents: List[Document] = []
 	errors: List[str] = []
-	with ThreadPoolExecutor(max_workers=min(8, max(1, len(list(sources))))) as pool:
-		futures = {pool.submit(load_source, source): source for source in sources}
+	with ThreadPoolExecutor(max_workers=min(8, max(1, len(source_list)))) as pool:
+		futures = {pool.submit(load_source, source): source for source in source_list}
 		for future in as_completed(futures):
 			source = futures[future]
 			try:
