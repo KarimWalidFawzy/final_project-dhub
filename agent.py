@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
-
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AutoModel, AutoModelForMaskedLM, AutoModelForCausalLM
 
 @dataclass
 class StepResult:
@@ -18,6 +18,8 @@ class Agent:
         self.name = name
         self.steps: List[Callable[[Dict[str, Any]], Any]] = []
         self.history: List[StepResult] = []
+        self.model = AutoModelForCausalLM.from_pretrained("gpt3")  # Placeholder for a model or LLM if needed
+        self.tokenizer = AutoTokenizer.from_pretrained("gpt3")  # Placeholder for a tokenizer if needed
 
     def add_step(self, name: str, function: Callable[[Dict[str, Any]], Any]) -> "Agent":
         function.step_name = name  # type: ignore[attr-defined]
