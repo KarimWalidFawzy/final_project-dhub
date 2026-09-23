@@ -2,14 +2,24 @@
 
 import os
 from functools import lru_cache
+from importlib import import_module
 from typing import Optional
-from groq import Groq
 from summarizer import summarize
-# --- Groq API Configuration ---
-GROQ_API_KEY = ""
-MODEL_NAME   = "llama-3.3-70b-versatile"
 
-client = Groq(api_key=GROQ_API_KEY)
+
+@lru_cache(maxsize=1)
+def _get_groq_client():
+    """Create the Groq client only when a Groq request is actually needed."""
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    try:
+        groq_module = import_module("groq")
+    except ImportError:
+        return None
+    return groq_module.Groq(api_key=api_key)
+
+
 def call_llm(system_prompt: str, user_message: str) -> str:
     """
     Send a message to Groq and return the text response.
@@ -21,8 +31,11 @@ def call_llm(system_prompt: str, user_message: str) -> str:
     Returns:
         The agent's text response.
     """
+    client = _get_groq_client()
+    if client is None:
+        raise RuntimeError("GROQ_API_KEY and the groq package are required")
     response = client.chat.completions.create(
-        model=MODEL_NAME,
+        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_message}
@@ -55,6 +68,30 @@ def _openai_summary(text: str, task: str) -> Optional[str]:
     """Call the OpenAI Python API when an API key is configured."""
     if not os.getenv("OPENAI_API_KEY"):
         return None
+
+
+def _groq_summary(text: str, task: str) -> Optional[str]:
+    """Summarize evidence through the Groq chat-completions API."""
+    client = _get_groq_client()
+    if client is None:
+        return None
+    try:
+        response = client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Answer the research task using only the supplied evidence. State uncertainty when evidence is insufficient.",
+                },
+                {"role": "user", "content": _prompt(text, task)},
+            ],
+            temperature=0.2,
+            max_tokens=512,
+        )
+        content = response.choices[0].message.content
+        return content.strip() if content else None
+    except (ImportError, OSError, ValueError, IndexError):
+        return None
     try:
         from openai import OpenAI
 
@@ -85,15 +122,19 @@ def _transformers_summary(text: str, task: str) -> Optional[str]:
 
 
 def summarize_with_llm(text: str, task: str, max_sentences: int = 5) -> str:
-    """Summarize using OpenAI, Transformers, or extractive fallback.
+    """Summarize using Groq, OpenAI, Transformers, or extractive fallback.
 
-    Set ``LLM_PROVIDER`` to ``openai``, ``transformers``, or ``extractive``.
-    The default ``auto`` uses OpenAI when configured, then local Transformers
-    only when ``HF_MODEL`` is explicitly set, and otherwise stays offline.
+    Set ``LLM_PROVIDER`` to ``groq``, ``openai``, ``transformers``, or
+    ``extractive``. The default ``auto`` uses Groq when configured, then
+    OpenAI, local Transformers, and finally the offline extractive fallback.
     """
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
-    if provider not in {"auto", "openai", "transformers", "extractive"}:
-        raise ValueError("LLM_PROVIDER must be auto, openai, transformers, or extractive")
+    if provider not in {"auto", "groq", "openai", "transformers", "extractive"}:
+        raise ValueError("LLM_PROVIDER must be auto, groq, openai, transformers, or extractive")
+    if provider in {"auto", "groq"}:
+        result = _groq_summary(text, task)
+        if result or provider == "groq":
+            return result or summarize(text, task, max_sentences)
     if provider in {"auto", "openai"}:
         result = _openai_summary(text, task)
         if result or provider == "openai":
